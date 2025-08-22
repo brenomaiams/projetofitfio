@@ -1,4 +1,4 @@
-/* Container principal */
+
 .container {
   min-height: 100vh;
   background-color: #f3f4f6;
@@ -8,7 +8,7 @@
   padding: 16px;
 }
 
-/* Card */
+
 .card {
   background: white;
   border-radius: 16px;
@@ -18,7 +18,7 @@
   overflow: hidden;
 }
 
-/* Header */
+
 .header {
   background: #0c2146;
   color: white;
@@ -33,6 +33,11 @@
   font-weight: bold;
 }
 
+.botoes {
+  display: flex;
+  gap: 12px; 
+}
+
 .header .sobre {
   background: transparent;
   border: none;
@@ -41,7 +46,7 @@
   font-size: 14px;
 }
 
-/* Conteúdo */
+
 .content {
   display: flex;
   flex-direction: column;
@@ -57,7 +62,6 @@
   }
 }
 
-/* Painel de horários */
 .grade-dias {
   display: flex;
   gap: 16px;
@@ -108,27 +112,52 @@
   color: white;
 }
 
-/* Resumo da seleção */
 .resumo {
   margin-top: 20px;
   font-size: 14px;
 }
 
 .confirmar {
-  margin-top: 10px;
-  padding: 10px 20px;
-  background: #0c2146;
+  background-color: #28a745;
   color: white;
+  padding: 10px 20px;
+  margin-top: 10px;
   border: none;
-  border-radius: 6px;
+  border-radius: 8px;
   cursor: pointer;
+  font-weight: bold;
+  transition: background-color 0.3s ease;
 }
 
 .confirmar:hover {
-  background: #132d63;
+  background-color: #218838;
 }
 
-/* Mensagem lateral */
+.cancelar {
+  background-color: #dc3545;
+  color: white;
+  padding: 10px 20px;
+  margin-top: 10px;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: bold;
+  transition: background-color 0.3s ease;
+}
+
+.cancelar:hover {
+  background-color: #b02a37;
+}
+
+.aviso {
+  margin-top: 15px;
+  padding: 12px;
+  border-radius: 10px;
+  background-color: #f8f9fa;
+  border: 1px solid #ddd;
+  text-align: center;
+}
+
 .mensagem {
   flex: 1;
   text-align: center;
