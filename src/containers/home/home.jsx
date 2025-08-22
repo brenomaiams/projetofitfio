@@ -253,9 +253,7 @@ export default function Agendamento() {
               )}
             </div>
 
-            <div className="modal-footer">
-              <button className="fechar" onClick={fecharTreinoModal}>Fechar</button>
-            </div>
+            
           </div>
         </div>
       )}

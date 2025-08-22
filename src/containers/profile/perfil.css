@@ -6,6 +6,7 @@
   align-items: center;
   justify-content: center;
   padding: 16px;
+  font-family: 'Poppins', sans-serif;
 }
 
 /* Card */
@@ -16,6 +17,7 @@
   width: 100%;
   max-width: 500px;
   padding: 32px;
+  font-family: 'Poppins', sans-serif;
 }
 
 /* Header */
@@ -27,6 +29,7 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
+  font-family: 'Poppins', sans-serif;
 }
 
 .perfil-header h1 {
