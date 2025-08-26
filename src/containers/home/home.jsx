@@ -1,8 +1,6 @@
 import React, { useState, useEffect } from "react";
 import "./Agendamento.css";
 import { useNavigate } from "react-router-dom";
-
-// importa os treinos do arquivo separado
 import treinosPorGrupo from "./treinos/treinos";
 
 export default function Agendamento() {
@@ -11,123 +9,25 @@ export default function Agendamento() {
   const [selecionado, setSelecionado] = useState(null);
   const [confirmado, setConfirmado] = useState(null);
   const [todosAgendamentos, setTodosAgendamentos] = useState([]);
+  const [ocupacaoPorSlot, setOcupacaoPorSlot] = useState({});
 
-  // estados do popup de treino
   const [showTreinoModal, setShowTreinoModal] = useState(false);
   const [grupoSelecionado, setGrupoSelecionado] = useState("");
   const [treinoGerado, setTreinoGerado] = useState(null);
+
+  const [showOpcoesModal, setShowOpcoesModal] = useState(false);
+  const [pessoasNoHorario, setPessoasNoHorario] = useState([]);
+  const [carregandoPessoas, setCarregandoPessoas] = useState(false);
 
   const navigate = useNavigate();
 
   const diasSemana = ["Segunda", "Terça", "Quarta", "Quinta", "Sexta"];
   const horarios = Array.from({ length: 12 }, (_, i) => `${(i + 8).toString().padStart(2, "0")}:00`);
 
-  useEffect(() => {
-    const nomeSalvo = localStorage.getItem("nomeUsuario");
-    const raSalvo = localStorage.getItem("raUsuario");
-    if (nomeSalvo) setNome(nomeSalvo.split(" ")[0]);
-    if (raSalvo) {
-      setRa(raSalvo);
-  
-      fetch(`http://localhost:5000/agendamentos/${raSalvo}`)
-        .then(res => res.json())
-        .then(data => {
-          if (data.success && data.agendamento) setConfirmado(data.agendamento);
-        });
-  
-      // 🔑 carrega o treino do usuário específico
-      const treinoLocal = localStorage.getItem(`treinoGerado_${raSalvo}`);
-      if (treinoLocal) {
-        try { setTreinoGerado(JSON.parse(treinoLocal)); } catch {}
-      }
-    }
-  
-    fetch("http://localhost:5000/agendamentos")
-      .then(res => res.json())
-      .then(data => { if (data.success) setTodosAgendamentos(data.agendamentos); });
-  }, []);
-  
-
-  function handleLogout() {
-    localStorage.removeItem("nomeUsuario");
-    localStorage.removeItem("raUsuario");
-    navigate("/");
-  }
-
-  async function confirmarAgendamento() {
-    if (!selecionado) return;
-
-    try {
-      const res = await fetch("http://localhost:5000/agendamentos", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ra, dia: selecionado.dia, hora: selecionado.hora }),
-      });
-
-      const data = await res.json();
-      if (data.success) {
-        setConfirmado(selecionado);
-        setSelecionado(null);
-        setTodosAgendamentos([...todosAgendamentos, { ra, dia: selecionado.dia, hora: selecionado.hora }]);
-      } else {
-        alert(data.error);
-      }
-    } catch (err) { console.error(err); }
-  }
-
-  async function cancelarAgendamento() {
-    if (!confirmado) return;
-
-    try {
-      const res = await fetch("http://localhost:5000/agendamentos", {
-        method: "DELETE",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ra, dia: confirmado.dia, hora: confirmado.hora }),
-      });
-
-      const data = await res.json();
-      if (data.success) {
-        setConfirmado(null);
-        setTodosAgendamentos(todosAgendamentos.filter(a => !(a.ra === ra)));
-      } else {
-        alert(data.error);
-      }
-    } catch (err) { console.error(err); }
-  }
-
-  // --- lógica do popup de treino ---
-  function abrirTreinoModal() {
-    setGrupoSelecionado("");
-    setShowTreinoModal(true);
-  }
-
-  function fecharTreinoModal() {
-    setShowTreinoModal(false);
-  }
-
-  function gerarTreino() {
-    const chave = normalizarGrupo(grupoSelecionado);
-    if (!chave || !treinosPorGrupo[chave]) return;
-  
-    const plano = {
-      grupo: grupoSelecionado,
-      itens: treinosPorGrupo[chave],
-    };
-    setTreinoGerado(plano);
-  
-    // salva o treino separado por RA
-    if (ra) {
-      localStorage.setItem(`treinoGerado_${ra}`, JSON.stringify(plano));
-    }
-  }
-  
-
+  // ========================= UTILIDADES =========================
   function normalizarGrupo(g) {
     if (!g) return "";
-    const s = g
-      .toLowerCase()
-      .normalize("NFD")
-      .replace(/\p{Diacritic}/gu, "");
+    const s = g.toLowerCase().normalize("NFD").replace(/\p{Diacritic}/gu, "");
     if (["bracos","costas","pernas","peito","ombros","triceps","gluteos"].includes(s))
       return s === "bracos" ? "braços" : s === "triceps" ? "tríceps" : s === "gluteos" ? "glúteos" : s;
     const direto = ["braços","costas","pernas","peito","ombros","tríceps","glúteos"];
@@ -137,6 +37,125 @@ export default function Agendamento() {
 
   const opcoesTreino = ["braços","costas","pernas","peito","ombros","tríceps","glúteos"];
 
+  function lotacaoDoSlot(dia, hora) {
+    return ocupacaoPorSlot[`${dia}_${hora}`] || 0;
+  }
+
+  // ========================= CARREGAR OCUPAÇÃO =========================
+  async function atualizarOcupacaoSlot(dia, hora) {
+    try {
+      const res = await fetch(`http://localhost:5000/agendamentos/${dia}/${hora}`);
+      const data = await res.json();
+      if (data.success) setOcupacaoPorSlot(prev => ({ ...prev, [`${dia}_${hora}`]: data.ocupacao || 0 }));
+    } catch (err) {
+      console.error(err);
+    }
+  }
+
+  async function atualizarOcupacaoTodosSlots() {
+    for (let dia of diasSemana) {
+      for (let hora of horarios) {
+        await atualizarOcupacaoSlot(dia, hora);
+      }
+    }
+  }
+
+  async function carregarPessoasDoHorario(diaParam, horaParam) {
+    const dia = diaParam || selecionado?.dia;
+    const hora = horaParam || selecionado?.hora;
+    if (!dia || !hora) return;
+
+    setCarregandoPessoas(true);
+    try {
+      const res = await fetch(`http://localhost:5000/agendamentos/${dia}/${hora}`);
+      const data = await res.json();
+      if (data.success) setPessoasNoHorario(data.pessoas || []);
+      else setPessoasNoHorario([]);
+    } catch (err) {
+      console.error(err);
+      setPessoasNoHorario([]);
+    } finally {
+      setCarregandoPessoas(false);
+    }
+  }
+
+  // ========================= USE EFFECT =========================
+  useEffect(() => {
+    const nomeSalvo = localStorage.getItem("nomeUsuario");
+    const raSalvo = localStorage.getItem("raUsuario");
+    if (nomeSalvo) setNome(nomeSalvo.split(" ")[0]);
+    if (raSalvo) {
+      setRa(raSalvo);
+      fetch(`http://localhost:5000/agendamentos/${raSalvo}`)
+        .then(res => res.json())
+        .then(data => { if (data.success && data.agendamento) setConfirmado(data.agendamento); });
+
+      const treinoLocal = localStorage.getItem(`treinoGerado_${raSalvo}`);
+      if (treinoLocal) {
+        try { setTreinoGerado(JSON.parse(treinoLocal)); } catch {}
+      }
+    }
+
+    atualizarOcupacaoTodosSlots();
+  }, []);
+
+  // ========================= AGENDAMENTO =========================
+  async function confirmarAgendamento() {
+    if (!selecionado) return;
+    try {
+      const res = await fetch("http://localhost:5000/agendamentos", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ra, dia: selecionado.dia, hora: selecionado.hora }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setConfirmado(selecionado);
+        setShowOpcoesModal(false);
+        setTodosAgendamentos(prev => [...prev, { ra, dia: selecionado.dia, hora: selecionado.hora }]);
+        await atualizarOcupacaoSlot(selecionado.dia, selecionado.hora);
+      } else alert(data.error);
+    } catch (err) { console.error(err); }
+  }
+
+  async function cancelarAgendamento() {
+    if (!confirmado) return;
+    try {
+      const res = await fetch("http://localhost:5000/agendamentos", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ra }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        // Atualiza ocupação do slot do agendamento cancelado
+        await atualizarOcupacaoSlot(confirmado.dia, confirmado.hora);
+        setConfirmado(null);
+        setTodosAgendamentos(prev => prev.filter(a => a.ra !== ra));
+      } else alert(data.error);
+    } catch (err) { console.error(err); }
+  }
+
+  // ========================= MODAIS =========================
+  function abrirTreinoModal() { setGrupoSelecionado(""); setShowTreinoModal(true); }
+  function fecharTreinoModal() { setShowTreinoModal(false); }
+  function abrirOpcoes(dia, hora) { setSelecionado({ dia, hora }); setPessoasNoHorario([]); setShowOpcoesModal(true); carregarPessoasDoHorario(dia, hora); }
+
+  function gerarTreino() {
+    const chave = normalizarGrupo(grupoSelecionado);
+    if (!chave || !treinosPorGrupo[chave]) return;
+    const plano = { grupo: grupoSelecionado, itens: treinosPorGrupo[chave] };
+    setTreinoGerado(plano);
+    if (ra) localStorage.setItem(`treinoGerado_${ra}`, JSON.stringify(plano));
+  }
+
+  function handleLogout() {
+    localStorage.removeItem("nomeUsuario");
+    localStorage.removeItem("raUsuario");
+    navigate("/");
+  }
+
+  // ========================= RENDER =========================
   return (
     <div className="container">
       <div className="card">
@@ -158,29 +177,22 @@ export default function Agendamento() {
                   <h3>{dia}</h3>
                   {horarios.map(hora => {
                     const isSelecionado = selecionado?.dia === dia && selecionado?.hora === hora;
-                    const ocupado = todosAgendamentos.some(a => a.dia === dia && a.hora === hora);
-                    const desabilitado = confirmado ? true : ocupado;
+                    const desabilitado = confirmado ? true : lotacaoDoSlot(dia, hora) >= 10;
                     return (
                       <button
                         key={hora}
                         disabled={desabilitado}
                         className={`hora-btn ${desabilitado ? "ocupado" : "disponivel"} ${isSelecionado ? "selecionado" : ""}`}
-                        onClick={() => setSelecionado({ dia, hora })}
+                        onClick={() => abrirOpcoes(dia, hora)}
+                        title={`${lotacaoDoSlot(dia, hora)}/10 agendados`}
                       >
-                        {hora}
+                        {hora} <span className="badge-ocupacao">{lotacaoDoSlot(dia, hora)}/10</span>
                       </button>
                     );
                   })}
                 </div>
               ))}
             </div>
-
-            {selecionado && (
-              <div className="resumo">
-                <p>Você selecionou: <strong>{selecionado.dia} - {selecionado.hora}</strong></p>
-                <button className="confirmar" onClick={confirmarAgendamento}>Confirmar Agendamento</button>
-              </div>
-            )}
           </div>
 
           <div className="mensagem">
@@ -198,62 +210,61 @@ export default function Agendamento() {
             {treinoGerado && (
               <div className="treino-card">
                 <h3>Seu treino de <span className="badge">{treinoGerado.grupo}</span></h3>
-                <ul>
-                  {treinoGerado.itens.map((t, idx) => (
-                    <li key={idx}><strong>{t.exercicio}</strong> — {t.series}</li>
-                  ))}
-                </ul>
+                <ul>{treinoGerado.itens.map((t, idx) => <li key={idx}><strong>{t.exercicio}</strong> — {t.series}</li>)}</ul>
               </div>
             )}
           </div>
         </div>
       </div>
 
+      {/* Modal de opções */}
+      {showOpcoesModal && selecionado && (
+        <div className="modal-backdrop" role="dialog" aria-modal="true" onClick={() => setShowOpcoesModal(false)}>
+          <div className="modal" onClick={e => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3>{selecionado.dia} — {selecionado.hora}</h3>
+              <button className="modal-close" onClick={() => setShowOpcoesModal(false)}>×</button>
+            </div>
+            <div className="modal-body">
+              <div className="acao-grid">
+                <button className="confirmar" onClick={confirmarAgendamento} disabled={lotacaoDoSlot(selecionado.dia, selecionado.hora) >= 10 || !!confirmado}>Agendar</button>
+                <button className="sobre" onClick={() => carregarPessoasDoHorario()}>Ver agendamentos</button>
+              </div>
+              <p className="ocupacao-info">Ocupação: <strong>{lotacaoDoSlot(selecionado.dia, selecionado.hora)}/10</strong></p>
+              <div className="treino-preview">
+                {carregandoPessoas && <p>Carregando...</p>}
+                {!carregandoPessoas && pessoasNoHorario.length > 0 && (
+                  <>
+                    <h4>Já agendados:</h4>
+                    <ul>{pessoasNoHorario.map((p, i) => <li key={i}><strong>{p.nome}</strong> ({p.ra})</li>)}</ul>
+                  </>
+                )}
+                {!carregandoPessoas && pessoasNoHorario.length === 0 && <p>Nenhum agendamento neste horário ainda.</p>}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Modal de Treino */}
       {showTreinoModal && (
         <div className="modal-backdrop" role="dialog" aria-modal="true" onClick={fecharTreinoModal}>
-          <div className="modal" onClick={(e) => e.stopPropagation()}>
+          <div className="modal" onClick={e => e.stopPropagation()}>
             <div className="modal-header">
               <h3>Gerar treino</h3>
-              <button className="modal-close" onClick={fecharTreinoModal} aria-label="Fechar">×</button>
+              <button className="modal-close" onClick={fecharTreinoModal}>×</button>
             </div>
-
             <div className="modal-body">
               <p>Selecione o grupo muscular:</p>
               <div className="opcoes-treino">
-                {opcoesTreino.map((opt) => (
-                  <button
-                    key={opt}
-                    className={`opcao-btn ${grupoSelecionado === opt ? "opcao-selecionada" : ""}`}
-                    onClick={() => setGrupoSelecionado(opt)}
-                  >
+                {opcoesTreino.map(opt => (
+                  <button key={opt} className={`opcao-btn ${grupoSelecionado === opt ? "opcao-selecionada" : ""}`} onClick={() => setGrupoSelecionado(opt)}>
                     {opt.charAt(0).toUpperCase() + opt.slice(1)}
                   </button>
                 ))}
               </div>
-
-              <button
-                className="confirmar"
-                disabled={!grupoSelecionado}
-                onClick={gerarTreino}
-              >
-                Gerar treino
-              </button>
-
-              {treinoGerado && grupoSelecionado && normalizarGrupo(grupoSelecionado) === normalizarGrupo(treinoGerado.grupo) && (
-                <div className="treino-preview">
-                  <h4>Treino gerado: {treinoGerado.grupo}</h4>
-                  <ul>
-                    {treinoGerado.itens.map((t, i) => (
-                      <li key={i}><strong>{t.exercicio}</strong> — {t.series}</li>
-                    ))}
-                  </ul>
-                  <p className="obs">Dica: aqueça por 5–10 min e ajuste a carga para terminar cada série perto da falha técnica.</p>
-                </div>
-              )}
+              <button className="confirmar" disabled={!grupoSelecionado} onClick={gerarTreino}>Gerar treino</button>
             </div>
-
-            
           </div>
         </div>
       )}
